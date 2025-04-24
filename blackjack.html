@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack RL Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .card {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            margin: 0.25rem;
+            min-width: 40px;
+            font-weight: 600;
+            background-color: white;
+            box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        }
+        .stats-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .stats-value {
+            font-weight: 400;
+            color: #1f2937;
+        }
+        progress {
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        progress::-webkit-progress-bar {
+            background-color: #e5e7eb;
+            border-radius: 5px;
+        }
+        progress::-webkit-progress-value {
+            background-color: #3b82f6;
+            border-radius: 5px;
+            transition: width 0.1s ease;
+        }
+        progress::-moz-progress-bar {
+             background-color: #3b82f6;
+             border-radius: 5px;
+             transition: width 0.1s ease;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-semibold text-center mb-6 text-gray-800">Blackjack Q-Learning Agent</h1>
+
+        <div class="mb-6 p-4 border border-gray-200 rounded-md bg-gray-50">
+            <h2 class="text-lg font-semibold mb-3 text-gray-700">Training Controls & Status</h2>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+                <div class="flex-1">
+                    <label for="episodes" class="block text-sm font-medium text-gray-700 mb-1">Episodes to Train:</label>
+                    <input type="number" id="episodes" value="200000" min="1000" step="1000" class="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button id="startButton" class="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">Start Training</button>
+                <button id="playButton" class="w-full sm:w-auto px-6 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out" disabled>Play One Hand</button>
+            </div>
+             <div class="mb-2">
+                <span class="stats-label">Status:</span>
+                <span id="status" class="stats-value ml-2">Idle</span>
+            </div>
+            <div class="mb-2">
+                 <span class="stats-label">Progress:</span>
+                 <span id="progressText" class="stats-value ml-2">0 / 0</span>
+            </div>
+            <progress id="progressBar" value="0" max="100" class="w-full"></progress>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="p-4 border border-gray-200 rounded-md bg-gray-50">
+                <h2 class="text-lg font-semibold mb-3 text-gray-700">Training Window Stats</h2>
+                 <div class="space-y-1 text-sm">
+                    <div><span class="stats-label">Wins:</span> <span id="wins" class="stats-value ml-2">0</span></div>
+                    <div><span class="stats-label">Losses:</span> <span id="losses" class="stats-value ml-2">0</span></div>
+                    <div><span class="stats-label">Pushes (Ties):</span> <span id="pushes" class="stats-value ml-2">0</span></div>
+                    <div><span class="stats-label">Total Games (Window):</span> <span id="totalGames" class="stats-value ml-2">0</span></div>
+                    <hr class="my-1 border-gray-300">
+                    <div><span class="stats-label">Win Rate:</span> <span id="winRate" class="stats-value ml-2 text-green-700 font-semibold">0.00%</span></div>
+                    <div><span class="stats-label">Loss Rate:</span> <span id="lossRate" class="stats-value ml-2 text-red-700 font-semibold">0.00%</span></div>
+                    <div><span class="stats-label">Push Rate:</span> <span id="pushRate" class="stats-value ml-2 text-gray-700 font-semibold">0.00%</span></div>
+                     <hr class="my-1 border-gray-300">
+                    <div><span class="stats-label">Current Epsilon:</span> <span id="epsilon" class="stats-value ml-2">1.000000</span></div>
+                </div>
+            </div>
+
+            <div class="p-4 border border-gray-200 rounded-md bg-gray-50">
+                <h2 class="text-lg font-semibold mb-3 text-gray-700">Example/Played Hand</h2>
+                <div>
+                    <p class="font-medium text-gray-600">Dealer's Hand (<span id="dealerScore">0</span>):</p>
+                    <div id="dealerHand" class="mb-2 min-h-[40px]"></div>
+                </div>
+                 <div>
+                    <p class="font-medium text-gray-600">Player's Hand (<span id="playerScore">0</span>):</p>
+                    <div id="playerHand" class="mb-2 min-h-[40px]"></div>
+                </div>
+                 <p class="font-medium text-gray-600">Agent Action: <span id="agentAction" class="font-normal text-blue-700">N/A</span></p>
+                <p class="font-medium text-gray-600">Result: <span id="gameResult" class="font-normal">N/A</span></p>
+            </div>
+        </div>
+
+         <div id="qTableInfo" class="mt-6 p-4 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-600">
+            Q-Table Size: <span id="qTableSize">0</span> states explored.
+        </div>
+
+    </div>
+
+    <script>
+        const CARD_VALUES = { 'A': 11, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 10, 'Q': 10, 'K': 10 };
+        const CARD_LABELS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K'];
+        const ACTION_MAP = { 0: 'Stand', 1: 'Hit' };
+        const PLAY_DELAY = 750;
+
+        class Deck {
+            constructor() {
+                this.cards = [];
+                for (const label of CARD_LABELS) {
+                    for (let i = 0; i < 4; i++) {
+                        this.cards.push(label);
+                    }
+                }
+                this.shuffle();
+            }
+
+            shuffle() {
+                for (let i = this.cards.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+                }
+            }
+
+            deal() {
+                if (this.cards.length === 0) {
+                    this.constructor();
+                }
+                return this.cards.pop();
+            }
+        }
+
+        class BlackjackEnv {
+            constructor() {
+                this.deck = new Deck();
+                this.playerHand = [];
+                this.dealerHand = [];
+                this.dealerHiddenCard = null;
+            }
+
+            _calculateSum(hand) {
+                let numAces = hand.filter(card => card === 'A').length;
+                let handSum = hand.reduce((sum, card) => sum + CARD_VALUES[card], 0);
+                while (handSum > 21 && numAces > 0) {
+                    handSum -= 10;
+                    numAces--;
+                }
+                return handSum;
+            }
+
+             _hasUsableAce(hand) {
+                let numAces = hand.filter(card => card === 'A').length;
+                let handSum = hand.reduce((sum, card) => sum + CARD_VALUES[card], 0);
+                 while (handSum > 21 && numAces > 0) {
+                    handSum -= 10;
+                    numAces--;
+                }
+                return numAces > 0 && handSum <= 21;
+            }
+
+            _getDealerShowingValue(hand){
+                 if (!hand || hand.length === 0) return 0;
+                 return CARD_VALUES[hand[0]];
+            }
+
+            _getState() {
+                const playerSum = Math.min(this._calculateSum(this.playerHand), 22);
+                const dealerShowing = this._getDealerShowingValue(this.dealerHand);
+                const usableAce = this._hasUsableAce(this.playerHand);
+                return `${playerSum}-${dealerShowing}-${usableAce}`;
+            }
+
+            reset() {
+                this.deck = new Deck();
+                this.playerHand = [this.deck.deal(), this.deck.deal()];
+                const firstCard = this.deck.deal();
+                this.dealerHiddenCard = this.deck.deal();
+                this.dealerHand = [firstCard];
+                return this._getState();
+            }
+
+             revealDealerHand() {
+                 if(this.dealerHiddenCard) {
+                     this.dealerHand.push(this.dealerHiddenCard);
+                     this.dealerHiddenCard = null;
+                 }
+             }
+
+             getDisplayDealerHand() {
+                 if (this.dealerHiddenCard) {
+                     return [this.dealerHand[0], '?'];
+                 }
+                 return this.dealerHand;
+             }
+
+            step(action) {
+                let reward = 0;
+                let done = false;
+
+                if (action === 1) {
+                    this.playerHand.push(this.deck.deal());
+                    const playerSum = this._calculateSum(this.playerHand);
+                    if (playerSum > 21) {
+                        reward = -1;
+                        done = true;
+                        this.revealDealerHand();
+                    } else {
+                        reward = 0;
+                        done = false;
+                    }
+                } else {
+                    done = true;
+                    this.revealDealerHand();
+                    while (this._calculateSum(this.dealerHand) < 17) {
+                        this.dealerHand.push(this.deck.deal());
+                    }
+
+                    const playerSum = this._calculateSum(this.playerHand);
+                    const dealerSum = this._calculateSum(this.dealerHand);
+
+                    if (dealerSum > 21 || playerSum > dealerSum) {
+                        reward = 1;
+                    } else if (playerSum < dealerSum) {
+                        reward = -1;
+                    } else {
+                        reward = 0;
+                    }
+                }
+                return { nextState: this._getState(), reward, done };
+            }
+        }
+
+        class QLearningAgent {
+            constructor(actions, alpha = 0.05, gamma = 0.99, epsilon = 1.0, epsilonDecay = 0.9999995, epsilonMin = 0.01) {
+                this.actions = actions;
+                this.alpha = alpha;
+                this.gamma = gamma;
+                this.epsilon = epsilon;
+                this.epsilonDecay = epsilonDecay;
+                this.epsilonMin = epsilonMin;
+                this.qTable = {};
+                this.originalEpsilon = epsilon;
+            }
+
+             _ensureStateInTable(state) {
+                if (!this.qTable[state]) {
+                    this.qTable[state] = {};
+                    for (const action of this.actions) {
+                        this.qTable[state][action] = 0.0;
+                    }
+                }
+            }
+
+            chooseAction(state, forceGreedy = false) {
+                 this._ensureStateInTable(state);
+                if (!forceGreedy && Math.random() < this.epsilon) {
+                    return this.actions[Math.floor(Math.random() * this.actions.length)];
+                } else {
+                    const qValues = this.qTable[state];
+                    let maxQ = -Infinity;
+                    let bestActions = [];
+
+                    for (const action of this.actions) {
+                         const q = qValues[action] !== undefined ? qValues[action] : 0.0;
+                        if (q > maxQ) {
+                            maxQ = q;
+                            bestActions = [action];
+                        } else if (q === maxQ) {
+                            bestActions.push(action);
+                        }
+                    }
+                    if (bestActions.length === 0) {
+                         return this.actions[Math.floor(Math.random() * this.actions.length)];
+                    }
+                    return bestActions[Math.floor(Math.random() * bestActions.length)];
+                }
+            }
+
+            learn(state, action, reward, nextState, done) {
+                 this._ensureStateInTable(state);
+                 this._ensureStateInTable(nextState);
+
+                const currentQ = this.qTable[state][action];
+                let maxNextQ = 0.0;
+                if (!done) {
+                    const nextQValues = this.qTable[nextState];
+                     const qValuesArray = Object.values(nextQValues).map(q => (q !== undefined ? q : 0.0));
+                     maxNextQ = qValuesArray.length > 0 ? Math.max(...qValuesArray) : 0.0;
+                }
+
+                const newQ = currentQ + this.alpha * (reward + this.gamma * maxNextQ - currentQ);
+                this.qTable[state][action] = newQ;
+            }
+
+            decayEpsilon() {
+                if (this.epsilon > this.epsilonMin) {
+                    this.epsilon *= this.epsilonDecay;
+                } else {
+                    this.epsilon = this.epsilonMin;
+                }
+            }
+
+             resetEpsilon() {
+                 this.epsilon = this.originalEpsilon;
+             }
+
+             getQTableSize() {
+                return Object.keys(this.qTable).length;
+            }
+        }
+
+        const statusEl = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
+        const playButton = document.getElementById('playButton');
+        const episodesInput = document.getElementById('episodes');
+        const winsEl = document.getElementById('wins');
+        const lossesEl = document.getElementById('losses');
+        const pushesEl = document.getElementById('pushes');
+        const totalGamesEl = document.getElementById('totalGames');
+        const winRateEl = document.getElementById('winRate');
+        const lossRateEl = document.getElementById('lossRate');
+        const pushRateEl = document.getElementById('pushRate');
+        const epsilonEl = document.getElementById('epsilon');
+        const dealerHandEl = document.getElementById('dealerHand');
+        const playerHandEl = document.getElementById('playerHand');
+        const dealerScoreEl = document.getElementById('dealerScore');
+        const playerScoreEl = document.getElementById('playerScore');
+        const agentActionEl = document.getElementById('agentAction');
+        const gameResultEl = document.getElementById('gameResult');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const qTableSizeEl = document.getElementById('qTableSize');
+
+        let env = new BlackjackEnv();
+        let agent = new QLearningAgent([0, 1]);
+        let trainingInterval;
+        let currentEpisode = 0;
+        let totalEpisodes = 0;
+        let results = { win: 0, loss: 0, push: 0 };
+        let isTraining = false;
+        let isPlaying = false;
+        const UPDATE_EVERY = 1000;
+        const BATCH_SIZE = 30000; // Adjusted batch size back for smoother updates with very slow decay
+
+        function renderHand(handElement, hand, hideFirst = false) {
+            handElement.innerHTML = '';
+            hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = (hideFirst && index === 1) ? '?' : card;
+                handElement.appendChild(cardDiv);
+            });
+        }
+
+        function updateTrainingUI(episode, totalEpisodes, currentResults, currentEpsilon) {
+             progressText.textContent = `${episode} / ${totalEpisodes}`;
+             progressBar.value = episode;
+             progressBar.max = totalEpisodes;
+
+            const totalGames = currentResults.win + currentResults.loss + currentResults.push;
+            const winRate = totalGames > 0 ? (currentResults.win / totalGames) * 100 : 0;
+            const lossRate = totalGames > 0 ? (currentResults.loss / totalGames) * 100 : 0;
+            const pushRate = totalGames > 0 ? (currentResults.push / totalGames) * 100 : 0;
+
+             if (episode % UPDATE_EVERY === 0 || episode === totalEpisodes) {
+                winsEl.textContent = currentResults.win;
+                lossesEl.textContent = currentResults.loss;
+                pushesEl.textContent = currentResults.push;
+                totalGamesEl.textContent = totalGames;
+                winRateEl.textContent = `${winRate.toFixed(2)}%`;
+                lossRateEl.textContent = `${lossRate.toFixed(2)}%`;
+                pushRateEl.textContent = `${pushRate.toFixed(2)}%`;
+                epsilonEl.textContent = currentEpsilon.toFixed(6);
+                qTableSizeEl.textContent = agent.getQTableSize();
+             }
+        }
+
+         function updatePlayUI(currentEnv, action = null, result = null) {
+             renderHand(dealerHandEl, currentEnv.getDisplayDealerHand(), currentEnv.dealerHiddenCard !== null);
+             renderHand(playerHandEl, currentEnv.playerHand);
+             dealerScoreEl.textContent = currentEnv.dealerHiddenCard === null ? currentEnv._calculateSum(currentEnv.dealerHand) : currentEnv._calculateSum([currentEnv.dealerHand[0]]);
+             playerScoreEl.textContent = currentEnv._calculateSum(currentEnv.playerHand);
+             agentActionEl.textContent = action !== null ? ACTION_MAP[action] : 'N/A';
+             gameResultEl.textContent = result !== null ? result : 'Playing...';
+         }
+
+         function getFinalResultText(currentEnv) {
+             const playerSum = currentEnv._calculateSum(currentEnv.playerHand);
+             const dealerSum = currentEnv._calculateSum(currentEnv.dealerHand);
+             if (playerSum > 21) return "Player Busts (Loss)";
+             if (dealerSum > 21) return "Dealer Busts (Win)";
+             if (playerSum > dealerSum) return "Player Wins";
+             if (dealerSum > playerSum) return "Dealer Wins (Loss)";
+             return "Push";
+         }
+
+
+        function runTrainingBatch() {
+            if (currentEpisode >= totalEpisodes || !isTraining) {
+                statusEl.textContent = 'Finished';
+                startButton.disabled = false;
+                playButton.disabled = false;
+                startButton.textContent = 'Start Training';
+                isTraining = false;
+                 updateTrainingUI(currentEpisode, totalEpisodes, results, agent.epsilon);
+                return;
+            }
+
+            const batchEnd = Math.min(currentEpisode + BATCH_SIZE, totalEpisodes);
+
+            for (let i = currentEpisode; i < batchEnd; i++) {
+                let state = env.reset();
+                let done = false;
+                let episodeReward = 0;
+
+                while (!done) {
+                    const action = agent.chooseAction(state);
+                    const { nextState, reward, done: episodeDone } = env.step(action);
+                    agent.learn(state, action, reward, nextState, episodeDone);
+                    state = nextState;
+                    done = episodeDone;
+                    if (done) {
+                       episodeReward = reward;
+                    }
+                }
+
+                if (episodeReward > 0) results.win++;
+                else if (episodeReward < 0) results.loss++;
+                else results.push++;
+
+                agent.decayEpsilon();
+            }
+
+            currentEpisode = batchEnd;
+
+            updateTrainingUI(currentEpisode, totalEpisodes, results, agent.epsilon);
+
+
+            if (isTraining) {
+               trainingInterval = setTimeout(runTrainingBatch, 0);
+            }
+        }
+
+         function playOneHand() {
+             if (isPlaying || isTraining) return;
+             isPlaying = true;
+             playButton.disabled = true;
+             startButton.disabled = true;
+             statusEl.textContent = 'Playing hand...';
+
+             let playEnv = new BlackjackEnv();
+             let state = playEnv.reset();
+             let done = false;
+             agentActionEl.textContent = 'N/A';
+             gameResultEl.textContent = 'Dealing...';
+
+             updatePlayUI(playEnv);
+
+             function playerTurn() {
+                 if (done) {
+                     dealerTurn();
+                     return;
+                 }
+
+                 const action = agent.chooseAction(state, true);
+                 agentActionEl.textContent = ACTION_MAP[action];
+                 updatePlayUI(playEnv, action);
+
+                 setTimeout(() => {
+                     const { nextState, reward, done: turnDone } = playEnv.step(action);
+                     state = nextState;
+                     done = turnDone;
+                     updatePlayUI(playEnv, action);
+
+                     if (action === 0 || done) {
+                         dealerTurn();
+                     } else {
+                         setTimeout(playerTurn, PLAY_DELAY);
+                     }
+                 }, PLAY_DELAY / 2);
+             }
+
+             function dealerTurn() {
+                 playEnv.revealDealerHand();
+                 const finalResult = getFinalResultText(playEnv);
+                 updatePlayUI(playEnv, agentActionEl.textContent, finalResult);
+
+                 statusEl.textContent = 'Finished playing hand.';
+                 playButton.disabled = false;
+                 startButton.disabled = false;
+                 isPlaying = false;
+             }
+
+             setTimeout(playerTurn, PLAY_DELAY);
+         }
+
+
+        startButton.addEventListener('click', () => {
+            if (isTraining || isPlaying) return;
+
+            totalEpisodes = parseInt(episodesInput.value, 10);
+            if (isNaN(totalEpisodes) || totalEpisodes <= 0) {
+                alert("Please enter a valid number of episodes.");
+                return;
+            }
+
+            isTraining = true;
+            statusEl.textContent = 'Training...';
+            startButton.disabled = true;
+            playButton.disabled = true;
+            startButton.textContent = 'Training...';
+
+            // Reset agent with the very slow decay rate and lower alpha
+            agent = new QLearningAgent([0, 1], 0.05, 0.99, 1.0, 0.99999, 0.01);
+            currentEpisode = 0;
+            results = { win: 0, loss: 0, push: 0 };
+            progressBar.max = totalEpisodes;
+            progressBar.value = 0;
+            progressText.textContent = `0 / ${totalEpisodes}`;
+            updateTrainingUI(0, totalEpisodes, results, agent.epsilon);
+            agentActionEl.textContent = 'N/A';
+            gameResultEl.textContent = 'N/A';
+
+            clearTimeout(trainingInterval);
+            runTrainingBatch();
+        });
+
+         playButton.addEventListener('click', playOneHand);
+
+         updateTrainingUI(0, 0, results, agent.epsilon);
+
+    </script>
+</body>
+</html>
